@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SunSpot: The Ephemeral City</title>
+    
+    <!-- Mapbox GL JS -->
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet" />
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- Core Layout: Scroll Snap --- */
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background: #0f172a; color: white; }
+        
+        main {
+            height: 100vh;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+        }
+
+        section {
+            height: 100vh;
+            width: 100%;
+            scroll-snap-align: start;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 0 20px;
+            overflow: hidden;
+        }
+
+        /* --- Liquid Glass UI (VisionOS Style) --- */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(24px) saturate(200%);
+            -webkit-backdrop-filter: blur(24px) saturate(200%);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+        }
+        
+        .glass-dark {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(15, 23, 42, 0.65) 100%);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+
+        /* --- Navigation --- */
+        .top-nav {
+            position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: 100;
+            display: flex; gap: 8px; padding: 8px 12px; border-radius: 999px;
+            background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .nav-link { 
+            font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; 
+            transition: all 0.3s; cursor: pointer; padding: 8px 16px; border-radius: 99px;
+        }
+        .nav-link:hover { color: white; background: rgba(255,255,255,0.1); }
+        .nav-link.active { color: #0f172a; background: #60a5fa; box-shadow: 0 0 15px rgba(96, 165, 250, 0.5); }
+
+        /* --- Side Dots Navigation --- */
+        .side-nav {
+            position: fixed; right: 30px; top: 50%; transform: translateY(-50%); z-index: 100;
+            display: flex; flex-direction: column; gap: 16px;
+        }
+        .nav-dot {
+            width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.2);
+            cursor: pointer; transition: all 0.3s ease; position: relative;
+        }
+        .nav-dot:hover, .nav-dot.active { background: #60a5fa; transform: scale(1.3); }
+        
+        .nav-dot::before {
+            content: attr(data-title);
+            position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+            background: rgba(0,0,0,0.8); padding: 4px 8px; border-radius: 4px;
+            font-size: 10px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .nav-dot:hover::before { opacity: 1; }
+
+        /* --- Animations --- */
+        .fade-up { opacity: 0; transform: translateY(30px); transition: all 0.8s ease-out; }
+        section.visible .fade-up { opacity: 1; transform: translateY(0); }
+
+        .text-gradient {
+            background: linear-gradient(to right, #60a5fa, #e879f9); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        
+        /* --- Sun Title Effect --- */
+        .sun-glow {
+            color: #fcd34d;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.8), 0 0 20px rgba(245, 158, 11, 0.6), 0 0 40px rgba(245, 158, 11, 0.4);
+            animation: sunPulse 3s infinite alternate;
+        }
+        @keyframes sunPulse {
+            0% { text-shadow: 0 0 10px rgba(251, 191, 36, 0.8), 0 0 20px rgba(245, 158, 11, 0.6); }
+            100% { text-shadow: 0 0 15px rgba(251, 191, 36, 1), 0 0 30px rgba(245, 158, 11, 0.8), 0 0 60px rgba(245, 158, 11, 0.6); }
+        }
+
+        /* --- Map Specifics --- */
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .marker-drop { animation: dropIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform-origin: bottom center; }
+        @keyframes dropIn { 0% { transform: translateY(-50px) scale(0); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+        .pulse-ring { display: block; border-radius: 50%; height: 20px; width: 20px; position: absolute; left: -10px; top: -10px; animation: pulsate 2s ease-out infinite; opacity: 0; z-index: -1; }
+        .pulse-red { border: 3px solid #ef4444; } .pulse-blue { border: 3px solid #3b82f6; }
+        @keyframes pulsate { 0% { transform: scale(0.1); opacity: 0; } 50% { opacity: 1; } 100% { transform: scale(3.0); opacity: 0; } }
+        #scan-overlay { pointer-events: none; background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.2) 100%); z-index: 40; }
+        .scan-line { width: 100%; height: 4px; background: #3b82f6; box-shadow: 0 0 20px #3b82f6, 0 0 10px #60a5fa; position: absolute; top: 0; animation: scanMove 0.8s ease-in-out infinite; }
+        @keyframes scanMove { 0% { transform: translateY(-10vh); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateY(110vh); opacity: 0; } }
+        
+        /* Custom Scale Control Styling */
+        .mapboxgl-ctrl-bottom-left { bottom: 24px !important; left: 24px !important; z-index: 10; }
+        .mapboxgl-ctrl-scale { background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.5) 100%) !important; backdrop-filter: blur(12px) saturate(150%); border: 1px solid rgba(255, 255, 255, 0.3) !important; border-top: none !important; border-radius: 0 0 8px 8px !important; color: #475569 !important; font-family: 'Inter', sans-serif !important; font-size: 10px !important; font-weight: 600 !important; text-transform: uppercase; height: 22px !important; display: flex !important; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+
+    <!-- Top Navigation (Categories) -->
+    <nav class="top-nav">
+        <span class="nav-link active" onclick="scrollToSection(1)">Context</span>
+        <span class="nav-link" onclick="scrollToSection(4)">Method</span>
+        <span class="nav-link" onclick="scrollToSection(6)">Demo</span>
+        <span class="nav-link" onclick="scrollToSection(7)">Discussion</span>
+    </nav>
+
+    <!-- Side Navigation (Dots) -->
+    <div class="side-nav">
+        <div class="nav-dot active" data-title="Home" onclick="scrollToSection(0)"></div>
+        <div class="nav-dot" data-title="The Phenomenon" onclick="scrollToSection(1)"></div>
+        <div class="nav-dot" data-title="The Gap" onclick="scrollToSection(2)"></div>
+        <div class="nav-dot" data-title="Target Users" onclick="scrollToSection(3)"></div>
+        <div class="nav-dot" data-title="Data Sources" onclick="scrollToSection(4)"></div>
+        <div class="nav-dot" data-title="Methodology" onclick="scrollToSection(5)"></div>
+        <div class="nav-dot" data-title="Live Demo" onclick="scrollToSection(6)"></div>
+        <div class="nav-dot" data-title="Discussion" onclick="scrollToSection(7)"></div>
+    </div>
+
+    <main id="main-scroll">
+        
+        <!-- SLIDE 1: HOME -->
+        <section id="slide-home">
+            <div class="absolute inset-0 -z-10">
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px] animate-pulse"></div>
+            </div>
+            <div class="text-center max-w-5xl fade-up">
+                <div class="inline-block px-4 py-1 mb-6 border border-blue-500/30 rounded-full bg-blue-500/10 text-blue-300 text-xs font-bold tracking-widest uppercase">
+                    UGOD5104 Group4
+                </div>
+                <h1 class="text-7xl md:text-9xl font-extrabold tracking-tight mb-6">
+                    <span class="sun-glow">Sun</span><span class="text-gradient">Spot</span>
+                </h1>
+                <p class="text-2xl text-slate-300 font-light tracking-wide">
+                    Redefining Navigation through Human Light Preferences
+                </p>
+            </div>
+        </section>
+
+        <!-- SLIDE 2: PHENOMENON -->
+        <section id="slide-phenomenon" class="bg-slate-900">
+            <div class="max-w-3xl text-center fade-up">
+                <h2 class="text-4xl font-bold mb-8 text-blue-400">The Urban Canyon Effect</h2>
+                <p class="text-xl text-slate-300 leading-relaxed mb-8">
+                    In dense metropolises, skyscrapers block sunlight, creating a dynamic, ever-changing environment.
+                </p>
+                <div class="glass-dark p-8 rounded-2xl border-l-4 border-yellow-500 text-left">
+                    <p class="text-lg text-white font-medium">
+                        "Shadows are not just absence of light; they define thermal comfort of the city."
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 3: THE GAP (PAIN POINTS) -->
+        <section id="slide-gap" class="bg-slate-900">
+            <div class="max-w-4xl w-full fade-up">
+                <h2 class="text-4xl font-bold mb-12 text-center">The Disconnect</h2>
+                <div class="grid md:grid-cols-2 gap-8">
+                    <div class="glass-dark p-8 rounded-3xl">
+                        <div class="text-red-400 text-3xl mb-4"><i class="fa-solid fa-route"></i></div>
+                        <h3 class="text-2xl font-bold mb-2">Static Efficiency</h3>
+                        <p class="text-slate-400">Current apps optimize strictly for distance or time. They treat the city as a flat, static surface.</p>
+                    </div>
+                    <div class="glass-dark p-8 rounded-3xl">
+                        <div class="text-blue-400 text-3xl mb-4"><i class="fa-solid fa-person-rays"></i></div>
+                        <h3 class="text-2xl font-bold mb-2">Dynamic Comfort</h3>
+                        <p class="text-slate-400">Humans need thermal comfort. We seek sun in winter and shade in summer, but maps don't show this.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 4: TARGET USERS -->
+        <section id="slide-users" class="bg-slate-900">
+            <div class="max-w-5xl w-full fade-up">
+                <h2 class="text-4xl font-bold mb-12 text-center">Who is this for?</h2>
+                <div class="grid md:grid-cols-3 gap-6">
+                    <div class="glass-dark p-6 rounded-2xl text-center hover:bg-white/5 transition-colors">
+                        <div class="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-400 text-2xl"><i class="fa-solid fa-briefcase"></i></div>
+                        <h3 class="text-xl font-bold mb-2">Office Workers</h3>
+                        <p class="text-sm text-slate-400">Craving Vitamin D and warm spots during winter lunch breaks.</p>
+                    </div>
+                    <div class="glass-dark p-6 rounded-2xl text-center hover:bg-white/5 transition-colors">
+                        <div class="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-purple-400 text-2xl"><i class="fa-solid fa-camera"></i></div>
+                        <h3 class="text-xl font-bold mb-2">Photographers</h3>
+                        <p class="text-sm text-slate-400">Hunting for the "Golden Hour" lighting in specific alleys.</p>
+                    </div>
+                    <div class="glass-dark p-6 rounded-2xl text-center hover:bg-white/5 transition-colors">
+                        <div class="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 text-green-400 text-2xl"><i class="fa-solid fa-baby-carriage"></i></div>
+                        <h3 class="text-xl font-bold mb-2">Vulnerable Groups</h3>
+                        <p class="text-sm text-slate-400">Elderly & parents needing cool, shaded routes in summer heat.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 5: DATA -->
+        <section id="slide-data" class="bg-slate-900">
+            <div class="max-w-4xl w-full fade-up">
+                <h2 class="text-4xl font-bold mb-12 text-center"><span class="text-blue-500">01.</span> Data Sources</h2>
+                <div class="space-y-4">
+                    <div class="glass-dark p-6 rounded-2xl flex items-center gap-6">
+                        <div class="text-4xl font-bold text-slate-600">A</div>
+                        <div>
+                            <h3 class="text-xl font-bold text-white">OpenStreetMap (OSM)</h3>
+                            <p class="text-slate-400">Building footprints & height tags to construct the 2.5D city model.</p>
+                        </div>
+                    </div>
+                    <div class="glass-dark p-6 rounded-2xl flex items-center gap-6">
+                        <div class="text-4xl font-bold text-slate-600">B</div>
+                        <div>
+                            <h3 class="text-xl font-bold text-white">SunCalc.js</h3>
+                            <p class="text-slate-400">Calculating solar azimuth and altitude based on geolocation and time.</p>
+                        </div>
+                    </div>
+                    <div class="glass-dark p-6 rounded-2xl flex items-center gap-6">
+                        <div class="text-4xl font-bold text-slate-600">C</div>
+                        <div>
+                            <h3 class="text-xl font-bold text-white">Mapbox GL JS</h3>
+                            <p class="text-slate-400">Rendering engine for 3D extrusion and real-time shadow casting.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 6: METHODS -->
+        <section id="slide-methods" class="bg-slate-900">
+            <div class="max-w-4xl w-full text-center fade-up">
+                <h2 class="text-4xl font-bold mb-8"><span class="text-blue-500">02.</span> Methodology</h2>
+                <p class="text-xl text-slate-300 mb-12">
+                    We implemented a <strong>Dual-Mode Routing Algorithm</strong>.
+                </p>
+                <div class="grid md:grid-cols-2 gap-8 text-left">
+                    <div class="glass-dark p-8 rounded-3xl border-t-4 border-orange-500">
+                        <h4 class="font-bold text-2xl mb-2 text-white">Sun-Seeker Mode</h4>
+                        <p class="text-slate-400">Calculates path weights by maximizing solar exposure. Ideal for winter.</p>
+                    </div>
+                    <div class="glass-dark p-8 rounded-3xl border-t-4 border-blue-500">
+                        <h4 class="font-bold text-2xl mb-2 text-white">Vampire Mode</h4>
+                        <p class="text-slate-400">Prioritizes building shadows (Ray-casting) to minimize UV exposure. Essential for summer.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 7: LIVE DEMO (THE MAP) -->
+        <section id="slide-demo" class="p-0">
+            <!-- Map Container -->
+            <div id="map"></div>
+
+            <!-- Scanning Overlay -->
+            <div id="scan-overlay" class="absolute inset-0 hidden flex flex-col items-center justify-center">
+                <div class="scan-line"></div>
+                <div class="glass-dark px-10 py-6 rounded-3xl flex flex-col items-center gap-4 z-50 shadow-2xl border border-white/10">
+                    <div class="flex gap-2">
+                        <div class="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                        <div class="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                        <div class="w-3 h-3 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    </div>
+                    <h2 class="text-lg font-bold tracking-wide text-white">ANALYZING GEOMETRY</h2>
+                    <p class="text-xs text-blue-200 font-mono" id="scan-text">Calculating solar incidence...</p>
+                </div>
+            </div>
+
+            <!-- Top Right: Scenario Dropdown -->
+            <div class="absolute top-24 right-6 z-30 group flex flex-col items-end">
+                <div class="glass-panel px-4 py-2 rounded-full flex items-center gap-3 cursor-pointer transition-all hover:scale-105 relative z-20">
+                    <div class="flex flex-col items-end leading-tight">
+                        <span id="clock-display" class="font-mono font-bold text-lg text-slate-700">08:00</span>
+                        <span id="scenario-label" class="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Morning</span>
+                    </div>
+                    <div class="w-px h-8 bg-slate-400/50"></div>
+                    <button id="btn-play-sun" onclick="toggleSunSimulation(event)" class="w-8 h-8 rounded-full bg-white/50 hover:bg-blue-500 hover:text-white flex items-center justify-center transition-colors text-slate-600 shadow-sm">
+                        <i class="fa-solid fa-play text-xs ml-0.5"></i>
+                    </button>
+                </div>
+
+                <div class="hidden group-hover:block pt-2 w-40 relative z-10">
+                    <div class="glass-panel rounded-2xl overflow-hidden shadow-xl flex flex-col p-1.5">
+                        <button onclick="setScenario('morning')" class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-50/80 text-slate-600 hover:text-blue-600 transition-colors text-xs font-medium text-left">
+                            <span><i class="fa-regular fa-sun mr-2"></i>Morning</span>
+                            <span class="opacity-50">08:00</span>
+                        </button>
+                        <button onclick="setScenario('noon')" class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-50/80 text-slate-600 hover:text-blue-600 transition-colors text-xs font-medium text-left">
+                            <span><i class="fa-solid fa-sun mr-2"></i>Noon</span>
+                            <span class="opacity-50">12:00</span>
+                        </button>
+                        <button onclick="setScenario('evening')" class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-50/80 text-slate-600 hover:text-blue-600 transition-colors text-xs font-medium text-left">
+                            <span><i class="fa-solid fa-cloud-sun mr-2"></i>Evening</span>
+                            <span class="opacity-50">18:00</span>
+                        </button>
+                        <button onclick="setScenario('night')" class="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-50/80 text-slate-600 hover:text-blue-600 transition-colors text-xs font-medium text-left">
+                            <span><i class="fa-solid fa-moon mr-2"></i>Night</span>
+                            <span class="opacity-50">21:00</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Left Sidebar -->
+            <div class="absolute top-24 left-6 w-96 flex flex-col gap-4 z-20 transition-all duration-500" id="sidebar">
+                <div class="glass-panel p-6 rounded-3xl">
+                    <div class="flex items-center gap-2 mb-1">
+                        <div class="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                            <i class="fa-solid fa-city"></i>
+                        </div>
+                        <h1 class="text-xl font-bold text-slate-900 tracking-tight">SunSpot <span class="text-blue-600">Pro</span></h1>
+                    </div>
+                    <p class="text-xs text-slate-500 mb-5 ml-10">Next-Gen Microclimate Routing</p>
+
+                    <div class="flex justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400 border-t border-slate-200/50 pt-4">
+                        <button onclick="resetApp()" id="step-1" class="hover:text-blue-500 transition-colors cursor-pointer text-left" title="Reset All">1. Mode</button>
+                        <button onclick="resetToOrigin()" id="step-2" class="hover:text-blue-500 transition-colors cursor-pointer text-left" title="Reselect Origin">2. Origin</button>
+                        <button onclick="resetToDest()" id="step-3" class="hover:text-blue-500 transition-colors cursor-pointer text-left" title="Reselect Destination">3. Dest</button>
+                        <span id="step-4" class="transition-colors cursor-default">4. Route</span>
+                    </div>
+                </div>
+
+                <div id="panel-mode" class="glass-panel p-2 rounded-3xl transition-all duration-300">
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setPreference('cool')" id="btn-cool" class="mode-btn p-3 rounded-2xl bg-white/80 border-2 border-blue-500 shadow-sm flex flex-col items-center gap-2 transition-all">
+                            <i class="fa-solid fa-snowflake text-blue-500 text-xl"></i>
+                            <span class="text-[10px] font-bold text-slate-700">Cool</span>
+                        </button>
+                        <button onclick="setPreference('fast')" id="btn-fast" class="mode-btn p-3 rounded-2xl bg-white/40 border-2 border-transparent hover:bg-white/60 flex flex-col items-center gap-2 transition-all opacity-70">
+                            <i class="fa-solid fa-bolt text-yellow-500 text-xl"></i>
+                            <span class="text-[10px] font-bold text-slate-700">Fast</span>
+                        </button>
+                        <button onclick="setPreference('hot')" id="btn-hot" class="mode-btn p-3 rounded-2xl bg-white/40 border-2 border-transparent hover:bg-white/60 flex flex-col items-center gap-2 transition-all opacity-70">
+                            <i class="fa-solid fa-sun text-orange-500 text-xl"></i>
+                            <span class="text-[10px] font-bold text-slate-700">Hot</span>
+                        </button>
+                    </div>
+                    <div id="instruction-box" class="mt-2 p-3 text-center hidden">
+                        <p class="text-xs font-medium text-blue-600 animate-pulse" id="instruction-text">Select Origin on Map</p>
+                    </div>
+                </div>
+
+                <div id="panel-result" class="glass-panel rounded-3xl overflow-hidden hidden flex flex-col">
+                    <div class="p-5 border-b border-slate-200/50 bg-white/20">
+                        <div class="flex justify-between items-start mb-2">
+                            <div>
+                                <h2 class="text-2xl font-bold text-slate-800" id="res-time">15 min</h2>
+                                <p class="text-xs text-slate-500">Estimated walking time</p>
+                            </div>
+                            <span class="px-2 py-1 bg-green-100/80 text-green-700 text-[10px] font-bold uppercase rounded-lg backdrop-blur-sm">Optimal</span>
+                        </div>
+                        <div class="flex gap-4 mt-2">
+                            <div class="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                                <i class="fa-solid fa-person-walking text-slate-400"></i> 0.99 km
+                            </div>
+                            <div class="flex items-center gap-1.5 text-xs font-bold text-blue-600" id="res-shade-container">
+                                <i class="fa-solid fa-cloud"></i> <span id="res-shade">84% Shade</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col">
+                        <div onclick="switchPath('cool')" id="row-cool" class="p-4 border-b border-slate-200/50 cursor-pointer hover:bg-white/40 transition-colors bg-blue-50/60 border-l-4 border-l-blue-500">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-bold text-sm text-slate-800"><i class="fa-solid fa-snowflake w-5 text-blue-500"></i> Shadow Path</span>
+                                <span class="text-xs font-bold text-slate-400">15 min</span>
+                            </div>
+                            <div class="text-[10px] text-slate-500 pl-5">Minimizes UV exposure. 84% Shade. Recommended.</div>
+                        </div>
+                        
+                        <div onclick="switchPath('fast')" id="row-fast" class="p-4 border-b border-slate-200/50 cursor-pointer hover:bg-white/40 transition-colors opacity-60 border-l-4 border-l-transparent">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-bold text-sm text-slate-800"><i class="fa-solid fa-bolt w-5 text-yellow-500"></i> Direct Path</span>
+                                <span class="text-xs font-bold text-slate-400">15 min</span>
+                            </div>
+                            <div class="text-[10px] text-slate-500 pl-5">Fastest route. 43% Shade.</div>
+                        </div>
+
+                        <div onclick="switchPath('hot')" id="row-hot" class="p-4 cursor-pointer hover:bg-white/40 transition-colors opacity-60 border-l-4 border-l-transparent">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-bold text-sm text-slate-800"><i class="fa-solid fa-sun w-5 text-orange-500"></i> Sunny Path</span>
+                                <span class="text-xs font-bold text-slate-400">15 min</span>
+                            </div>
+                            <div class="text-[10px] text-slate-500 pl-5">Maximum sun exposure. 18% Shade.</div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-slate-50/30">
+                        <button onclick="resetApp()" class="w-full py-2 rounded-xl border border-slate-200/60 text-xs font-bold text-slate-500 hover:bg-white/80 hover:text-slate-800 transition-all shadow-sm">
+                            <i class="fa-solid fa-rotate-left mr-1"></i> New Route
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Right: Controls (Updated with Zoom Buttons) -->
+            <div class="absolute bottom-6 right-6 flex flex-col items-end gap-3 z-20">
+                <!-- Custom Zoom Controls -->
+                <div class="flex flex-col gap-2">
+                    <button onclick="map.zoomIn()" class="glass-panel w-12 h-12 rounded-2xl flex items-center justify-center hover:bg-white/80 hover:scale-105 transition-all text-slate-700 shadow-lg" title="Zoom In">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                    <button onclick="map.zoomOut()" class="glass-panel w-12 h-12 rounded-2xl flex items-center justify-center hover:bg-white/80 hover:scale-105 transition-all text-slate-700 shadow-lg" title="Zoom Out">
+                        <i class="fa-solid fa-minus"></i>
+                    </button>
+                </div>
+
+                <!-- 3D Toggle & Reset -->
+                <div class="flex flex-col gap-2">
+                    <button id="btn-dimension" onclick="toggleDimension()" class="glass-panel w-12 h-12 rounded-2xl flex items-center justify-center hover:bg-white/80 hover:scale-105 transition-all text-slate-700 shadow-lg group">
+                        <div class="flex flex-col items-center">
+                            <span id="dim-text" class="text-xs font-black group-hover:text-blue-600">3D</span>
+                            <span class="text-[8px] text-slate-400">View</span>
+                        </div>
+                    </button>
+                    
+                    <button onclick="resetCamera()" class="glass-panel w-12 h-12 rounded-2xl flex items-center justify-center hover:bg-white/80 hover:scale-105 transition-all text-slate-700 shadow-lg" title="Reset Camera">
+                        <i class="fa-solid fa-crosshairs"></i>
+                    </button>
+                </div>
+
+                <div class="glass-panel px-3 py-1.5 rounded-xl text-[10px] font-mono text-slate-500">
+                    Lat: <span id="lat">00.0000</span> | Lng: <span id="lng">00.0000</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 8: DISCUSSION (Redesigned) -->
+        <section id="slide-discussion" class="bg-slate-900">
+            <div class="max-w-6xl w-full text-center fade-up">
+                <h2 class="text-4xl font-bold mb-16"><span class="text-blue-500">04.</span> Discussion</h2>
+                
+                <div class="grid md:grid-cols-2 gap-8 px-4">
+                    <!-- Limitation Card 1 -->
+                    <div class="glass-dark p-10 rounded-[2rem] border border-white/5 hover:border-yellow-500/50 transition-all duration-500 group text-left relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-150"></div>
+                        <div class="w-16 h-16 bg-yellow-500/20 rounded-2xl flex items-center justify-center mb-6 text-yellow-400 text-3xl">
+                            <i class="fa-solid fa-cube"></i>
+                        </div>
+                        <h3 class="text-3xl font-bold text-white mb-4">Data Gaps</h3>
+                        <p class="text-xl text-slate-400 font-light">
+                            Building heights in OSM are often estimated or missing, leading to potential <span class="text-yellow-200">"light leaks"</span> in the shadow model.
+                        </p>
+                    </div>
+
+                    <!-- Limitation Card 2 -->
+                    <div class="glass-dark p-10 rounded-[2rem] border border-white/5 hover:border-green-500/50 transition-all duration-500 group text-left relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-150"></div>
+                        <div class="w-16 h-16 bg-green-500/20 rounded-2xl flex items-center justify-center mb-6 text-green-400 text-3xl">
+                            <i class="fa-solid fa-tree"></i>
+                        </div>
+                        <h3 class="text-3xl font-bold text-white mb-4">Missing Canopy</h3>
+                        <p class="text-xl text-slate-400 font-light">
+                            Current model only accounts for concrete structures. Street trees, a vital source of shade, are <span class="text-green-200">not yet included</span>.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="mt-20 text-slate-600 text-sm font-mono uppercase tracking-widest">
+                    UGOD5104 Group4 © 2024
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- SCROLL LOGIC ---
+        const mainScroll = document.getElementById('main-scroll');
+        const sections = document.querySelectorAll('section');
+        const dots = document.querySelectorAll('.nav-dot');
+        const topNavLinks = document.querySelectorAll('.nav-link');
+
+        function scrollToSection(index) {
+            sections[index].scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Intersection Observer for Active State & Animations
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // 1. Update Side Dots
+                    const index = Array.from(sections).indexOf(entry.target);
+                    dots.forEach(d => d.classList.remove('active'));
+                    if(dots[index]) dots[index].classList.add('active');
+
+                    // 2. Update Top Nav (Grouped)
+                    topNavLinks.forEach(l => l.classList.remove('active'));
+                    if (index >= 1 && index <= 3) topNavLinks[0].classList.add('active'); // Context
+                    else if (index >= 4 && index <= 5) topNavLinks[1].classList.add('active'); // Method
+                    else if (index === 6) topNavLinks[2].classList.add('active'); // Demo
+                    else if (index === 7) topNavLinks[3].classList.add('active'); // Discussion
+
+                    // 3. Trigger Animation
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.5 });
+
+        sections.forEach(section => observer.observe(section));
+
+
+        // --- MAP LOGIC ---
+        mapboxgl.accessToken = 'pk.eyJ1IjoienRydGN0c2YiLCJhIjoiY21pbzR6aTNyMXdiaTNkcTdpM3A1a3k3YSJ9.fwnoWoYxu5SnHQckKZ9uXw'; 
+
+        const ORIGIN_COORDS = [-73.9719, 40.7604]; 
+        const DEST_COORDS = [-73.9761, 40.7657];   
+        const CENTER_VIEW = [-73.975, 40.755];
+
+        const PATHS = {
+            'cool': {
+                coordinates: [
+                    ORIGIN_COORDS,
+                    [-73.9732, 40.76095], [-73.9718, 40.7629], 
+                    [-73.9737,40.7637], [-73.9757,40.7645], [-73.97666,40.76488],
+                    [-73.97659, 40.765], [-73.9761, 40.7657], 
+                    DEST_COORDS
+                ],
+                color: '#3b82f6', 
+                stats: { time: '15 min', shade: '84% Shade' }
+            },
+            'fast': {
+                coordinates: [
+                    ORIGIN_COORDS,
+                    [-73.9733, 40.7610],[-73.9780, 40.7630],
+                    [-73.9770, 40.7644],
+                    DEST_COORDS
+                ],
+                color: '#eab308', 
+                stats: { time: '15 min', shade: '43% Shade' }
+            },
+            'hot': {
+                coordinates: [
+                    ORIGIN_COORDS,
+                    [-73.97145, 40.7610], 
+                    [-73.9729, 40.7616], 
+                    [-73.9745,40.7623],
+                    [-73.9776,40.7636],
+                    DEST_COORDS
+                ],
+                color: '#f97316', 
+                stats: { time: '15 min', shade: '18% Shade' }
+            }
+        };
+
+        const SCENARIOS = {
+            'morning': { time: '08:00', label: 'Morning', preset: 'dawn' },
+            'noon':    { time: '12:00', label: 'Noon',    preset: 'day' },
+            'evening': { time: '18:00', label: 'Evening', preset: 'dusk' },
+            'night':   { time: '21:00', label: 'Night',   preset: 'night' }
+        };
+
+        let currentMode = 'cool';
+        let currentScenario = 'morning'; 
+        let appState = 'IDLE'; 
+        let markers = [];
+        let is3D = false;
+        let isPlayingSun = false;
+
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/standard',
+            center: CENTER_VIEW,
+            zoom: 13.5,
+            pitch: 0,
+            bearing: 0,
+            attributionControl: false,
+            projection: 'mercator',
+            scrollZoom: true // ENABLED: Allow wheel to zoom map
+        });
+
+        // --- CRITICAL: Prevent Page Scroll when on Map ---
+        // This stops the wheel event from bubbling up to the <main> container
+        // effectively "trapping" the wheel inside the map for zooming only.
+        document.getElementById('slide-demo').addEventListener('wheel', function(e) {
+            e.stopPropagation();
+        }, { passive: false });
+
+        
+        const scale = new mapboxgl.ScaleControl({ maxWidth: 100, unit: 'metric' });
+        map.addControl(scale, 'bottom-left');
+
+        function forceEnglishScale() {
+            const checkExist = setInterval(() => {
+                const scaleEl = document.querySelector('.mapboxgl-ctrl-scale');
+                if (scaleEl) {
+                    clearInterval(checkExist);
+                    const observer = new MutationObserver(() => {
+                        const text = scaleEl.innerText;
+                        if (text.includes('米')) scaleEl.innerText = text.replace('米', 'm');
+                        else if (text.includes('公里')) scaleEl.innerText = text.replace('公里', 'km');
+                    });
+                    observer.observe(scaleEl, { characterData: true, childList: true, subtree: true });
+                }
+            }, 500);
+        }
+        forceEnglishScale();
+
+        map.on('style.load', () => {
+            setLightPreset(SCENARIOS['morning'].preset);
+
+            map.addSource('routes', {
+                'type': 'geojson',
+                'data': { 'type': 'FeatureCollection', 'features': [] },
+                'lineMetrics': true 
+            });
+
+            map.addLayer({
+                'id': 'routes-ghost',
+                'type': 'line',
+                'source': 'routes',
+                'layout': { 'line-cap': 'round', 'line-join': 'round' },
+                'paint': {
+                    'line-color': ['get', 'color'],
+                    'line-width': 3,
+                    'line-opacity': 0.3,
+                    'line-dasharray': [2, 4]
+                },
+                'filter': ['!=', 'type', currentMode]
+            });
+
+            map.addLayer({
+                'id': 'routes-outline',
+                'type': 'line',
+                'source': 'routes',
+                'layout': { 'line-cap': 'round', 'line-join': 'round' },
+                'paint': {
+                    'line-color': '#ffffff',
+                    'line-width': 8,
+                    'line-opacity': 1
+                },
+                'filter': ['==', 'type', currentMode]
+            });
+
+            map.addLayer({
+                'id': 'routes-core',
+                'type': 'line',
+                'source': 'routes',
+                'layout': { 'line-cap': 'round', 'line-join': 'round' },
+                'paint': {
+                    'line-color': ['get', 'color'],
+                    'line-width': 4,
+                    'line-opacity': 1
+                },
+                'filter': ['==', 'type', currentMode]
+            });
+
+            map.addLayer({
+                'id': 'routes-hit',
+                'type': 'line',
+                'source': 'routes',
+                'layout': {},
+                'paint': { 'line-width': 20, 'line-opacity': 0 }
+            });
+        });
+
+        function setLightPreset(preset) {
+            try {
+                map.setConfig('basemap', {
+                    'lightPreset': preset,
+                    'showPointOfInterestLabels': false,
+                    'showPlaceLabels': false,
+                    'showRoadLabels': false,
+                    'showTransitLabels': false
+                });
+            } catch(e) { console.log('Config pending'); }
+        }
+
+        map.on('mousemove', (e) => {
+            document.getElementById('lat').innerText = e.lngLat.lat.toFixed(4);
+            document.getElementById('lng').innerText = e.lngLat.lng.toFixed(4);
+            if (appState === 'PICK_START' || appState === 'PICK_END') map.getCanvas().style.cursor = 'crosshair';
+            else if (appState === 'SHOWN') {
+                const features = map.queryRenderedFeatures(e.point, { layers: ['routes-hit'] });
+                map.getCanvas().style.cursor = features.length ? 'pointer' : '';
+            } else map.getCanvas().style.cursor = '';
+        });
+
+        map.on('click', 'routes-hit', (e) => {
+            if (appState !== 'SHOWN') return;
+            const type = e.features[0].properties.type;
+            if (type) switchPath(type);
+        });
+
+        map.on('click', (e) => {
+            if (appState === 'PICK_START') {
+                e.preventDefault();
+                addMarker(ORIGIN_COORDS, 'start');
+                appState = 'PICK_END';
+                updateStepUI(3);
+                document.getElementById('instruction-text').innerText = "Select Destination";
+            } else if (appState === 'PICK_END') {
+                e.preventDefault();
+                addMarker(DEST_COORDS, 'end');
+                appState = 'CALC';
+                updateStepUI(4);
+                setTimeout(() => { startScanning(); }, 600);
+            }
+        });
+
+        function addMarker(coords, type) {
+            const el = document.createElement('div');
+            el.className = 'marker-drop';
+            if (type === 'end') el.innerHTML = `<div class="pulse-ring pulse-red"></div><i class="fa-solid fa-location-dot text-red-500 text-3xl drop-shadow-lg"></i>`;
+            else el.innerHTML = `<div class="pulse-ring pulse-blue"></div><i class="fa-solid fa-circle-dot text-slate-800 text-xl drop-shadow-lg bg-white rounded-full border-2 border-slate-800"></i>`;
+            const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' }).setLngLat(coords).addTo(map);
+            markers.push(marker);
+        }
+
+        function setPreference(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-white/80', 'shadow-sm');
+                btn.classList.add('border-transparent', 'bg-white/40', 'opacity-70');
+            });
+            const activeBtn = document.getElementById(`btn-${mode}`);
+            activeBtn.classList.remove('border-transparent', 'bg-white/40', 'opacity-70');
+            activeBtn.classList.add('border-blue-500', 'bg-white/80', 'shadow-sm');
+
+            if (appState === 'IDLE') {
+                appState = 'PICK_START';
+                document.getElementById('instruction-box').classList.remove('hidden');
+                updateStepUI(2);
+            } else if (appState === 'SHOWN') switchPath(mode);
+        }
+
+        function startScanning() {
+            document.getElementById('sidebar').classList.add('-translate-x-full');
+            const overlay = document.getElementById('scan-overlay');
+            overlay.classList.remove('hidden');
+            const texts = ["Scanning building geometry...", "Analyzing solar incidence...", "Optimizing comfort paths..."];
+            let i = 0;
+            const interval = setInterval(() => {
+                i++;
+                if(i < texts.length) document.getElementById('scan-text').innerText = texts[i];
+            }, 300);
+            setTimeout(() => {
+                clearInterval(interval);
+                overlay.classList.add('hidden');
+                document.getElementById('sidebar').classList.remove('-translate-x-full');
+                showResults();
+            }, 1000);
+        }
+
+        function showResults() {
+            appState = 'SHOWN';
+            document.getElementById('panel-mode').classList.add('hidden');
+            document.getElementById('panel-result').classList.remove('hidden');
+            const features = Object.keys(PATHS).map(key => ({
+                type: 'Feature',
+                properties: { type: key, color: PATHS[key].color },
+                geometry: { type: 'LineString', coordinates: PATHS[key].coordinates }
+            }));
+            map.getSource('routes').setData({ type: 'FeatureCollection', features: features });
+            const bounds = new mapboxgl.LngLatBounds(ORIGIN_COORDS, DEST_COORDS);
+            map.fitBounds(bounds, { padding: {top: 100, bottom: 100, left: 400, right: 100} });
+            switchPath(currentMode);
+        }
+
+        function switchPath(mode) {
+            currentMode = mode;
+            if (map.getLayer('routes-core')) {
+                map.setFilter('routes-core', ['==', 'type', mode]);
+                map.setFilter('routes-outline', ['==', 'type', mode]);
+                map.setFilter('routes-ghost', ['!=', 'type', mode]);
+            }
+            ['cool', 'fast', 'hot'].forEach(m => {
+                const row = document.getElementById(`row-${m}`);
+                if (m === mode) {
+                    row.classList.remove('opacity-60', 'border-l-transparent');
+                    row.classList.add('bg-blue-50/60', 'border-l-blue-500');
+                    document.getElementById('res-time').innerText = PATHS[m].stats.time;
+                    document.getElementById('res-shade').innerText = PATHS[m].stats.shade;
+                } else {
+                    row.classList.add('opacity-60', 'border-l-transparent');
+                    row.classList.remove('bg-blue-50/60', 'border-l-blue-500');
+                }
+            });
+        }
+
+        function resetApp() {
+            appState = 'IDLE';
+            markers.forEach(m => m.remove());
+            markers = [];
+            map.getSource('routes').setData({ type: 'FeatureCollection', features: [] });
+            document.getElementById('panel-result').classList.add('hidden');
+            document.getElementById('panel-mode').classList.remove('hidden');
+            document.getElementById('instruction-box').classList.add('hidden');
+            document.getElementById('instruction-text').innerText = "Select Origin on Map";
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-white/80', 'shadow-sm');
+                btn.classList.add('border-transparent', 'bg-white/40', 'opacity-70');
+            });
+            updateStepUI(1);
+            map.flyTo({ center: CENTER_VIEW, zoom: 13.5, pitch: 0 });
+        }
+
+        function resetToOrigin() {
+            if (appState === 'IDLE') return; 
+            appState = 'PICK_START';
+            markers.forEach(m => m.remove());
+            markers = [];
+            map.getSource('routes').setData({ type: 'FeatureCollection', features: [] });
+            document.getElementById('panel-result').classList.add('hidden');
+            document.getElementById('panel-mode').classList.remove('hidden');
+            document.getElementById('instruction-box').classList.remove('hidden');
+            document.getElementById('instruction-text').innerText = "Select Origin on Map";
+            updateStepUI(2);
+            map.flyTo({ center: CENTER_VIEW, zoom: 13.5, pitch: 0 });
+        }
+
+        function resetToDest() {
+            if (appState === 'IDLE' || appState === 'PICK_START') return;
+            appState = 'PICK_END';
+            if (markers.length > 1) { markers[1].remove(); markers.pop(); }
+            map.getSource('routes').setData({ type: 'FeatureCollection', features: [] });
+            document.getElementById('panel-result').classList.add('hidden');
+            document.getElementById('panel-mode').classList.remove('hidden');
+            document.getElementById('instruction-box').classList.remove('hidden');
+            document.getElementById('instruction-text').innerText = "Select Destination";
+            updateStepUI(3);
+            map.flyTo({ center: ORIGIN_COORDS, zoom: 14 });
+        }
+
+        function updateStepUI(step) {
+            for(let i=1; i<=4; i++) {
+                const el = document.getElementById(`step-${i}`);
+                if (i === step) {
+                    el.className = 'text-blue-600 font-bold transition-colors cursor-pointer text-left';
+                } else if (i < step) {
+                    el.className = 'text-slate-800 font-medium transition-colors cursor-pointer text-left hover:text-blue-500';
+                } else {
+                    el.className = 'text-slate-300 transition-colors cursor-default text-left';
+                }
+            }
+        }
+
+        function toggleDimension() {
+            is3D = !is3D;
+            map.easeTo({ pitch: is3D ? 60 : 0, bearing: is3D ? -15 : 0, duration: 1000 });
+            document.getElementById('dim-text').innerText = is3D ? '2D' : '3D';
+        }
+
+        function resetCamera() {
+            if (appState === 'SHOWN') {
+                const bounds = new mapboxgl.LngLatBounds(ORIGIN_COORDS, DEST_COORDS);
+                map.fitBounds(bounds, { padding: {top: 100, bottom: 100, left: 400, right: 100} });
+            } else {
+                map.flyTo({ center: CENTER_VIEW, zoom: 13.5, pitch: 0, bearing: 0 });
+            }
+        }
+
+        function setScenario(key) {
+            if (isPlayingSun) return; 
+            currentScenario = key;
+            const s = SCENARIOS[key];
+            document.getElementById('clock-display').innerText = s.time;
+            document.getElementById('scenario-label').innerText = s.label;
+            setLightPreset(s.preset);
+        }
+
+        function toggleSunSimulation(e) {
+            e.stopPropagation(); 
+            if (isPlayingSun) return;
+            isPlayingSun = true;
+            const btn = document.getElementById('btn-play-sun');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            const keys = Object.keys(SCENARIOS); 
+            const startIdx = keys.indexOf(currentScenario);
+            let sequence = [];
+            for (let i = 1; i <= keys.length; i++) {
+                const idx = (startIdx + i) % keys.length;
+                sequence.push(keys[idx]);
+            }
+            let i = 0;
+            function next() {
+                if (i >= sequence.length) {
+                    isPlayingSun = false;
+                    btn.innerHTML = '<i class="fa-solid fa-play text-xs ml-0.5"></i>';
+                    return;
+                }
+                const key = sequence[i];
+                const s = SCENARIOS[key];
+                document.getElementById('clock-display').innerText = s.time;
+                document.getElementById('scenario-label').innerText = s.label;
+                setLightPreset(s.preset);
+                i++;
+                setTimeout(next, 1500); 
+            }
+            next();
+        }
+    </script>
+</body>
+</html>
